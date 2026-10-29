@@ -1,0 +1,45 @@
+{
+  "name": "music-quest-live",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --dir src",
+    "emulators": "firebase emulators:start --project demo-music-quest",
+    "seed:emulator": "node scripts/seed-emulator.mjs",
+    "test:rules": "firebase emulators:exec --only database,auth --project demo-music-quest \"vitest run --config vitest.rules.config.ts\"",
+    "load:sim": "node scripts/load-sim.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "firebase-tools": "^15.34.2",
+    "globals": "^17.13.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@firebase/app-compat": "0.5.20",
+    "@firebase/app": "0.16.4"
+  }
+}
