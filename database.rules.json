@@ -91,6 +91,19 @@
       }
     },
 
+    "sessionAudioRequests": {
+      "$roomId": {
+        ".read": "auth != null && root.child('sessions').child($roomId).child('owner').val() === auth.uid",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && newData.exists() && root.child('sessionParticipants').child($roomId).child($uid).exists() && root.child('sessions').child($roomId).child('status').val() !== 'LOBBY' && root.child('sessions').child($roomId).child('status').val() !== 'QUEST_COMPLETED' && root.child('sessions').child($roomId).child('status').val() !== 'FINISHED' && (!data.exists() || data.child('at').val() < now - 3000)",
+          ".validate": "newData.hasChildren(['questionId','at']) && newData.child('at').val() === now",
+          "questionId": { ".validate": "newData.val() === root.child('sessions').child($roomId).child('questionId').val()" },
+          "at": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "sessionReveals": {
       "$roomId": {
         "$questionId": {

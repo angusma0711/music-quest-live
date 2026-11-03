@@ -160,3 +160,4 @@ input[type=text], input[type=email], input[type=password], input:not([type]) {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+.play-on-screen { display: grid; justify-items: center; gap: 4px; margin: 12px 0; }

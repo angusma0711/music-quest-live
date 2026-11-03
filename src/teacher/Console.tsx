@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { getTeacherClient } from '../services/firebase';
 import { useDbValue } from '../services/hooks';
@@ -143,7 +143,7 @@ export function Console({ roomId, session, bank, keys, connected, onLeave }: Pro
               <>
                 <h2 className="t-prompt">{question.prompt}</h2>
                 <QuestionMedia question={question} />
-                {question.kind === 'listening' && <AudioPlayer url={question.audioUrl} />}
+                {question.kind === 'listening' && <AudioPlayer key={question.id} url={question.audioUrl} roomId={roomId} questionId={question.id} participants={participants} />}
                 {question.kind !== 'reflection' && (
                   <ol className="t-options">
                     {question.options.map((opt, i) => {
@@ -260,12 +260,56 @@ function JoinInfo({ code }: { code: string }) {
   );
 }
 
-/** Classroom listening happens on the projector only; pupils' iPads never autoplay. */
-function AudioPlayer({ url }: { url?: string }) {
+/**
+ * Classroom listening happens on the projector only; pupils' iPads never autoplay.
+ * Pupils can press "play" on their iPad, which plays the clip here from the start.
+ */
+function AudioPlayer({ url, roomId, questionId, participants }: { url?: string; roomId: string; questionId: string; participants: Record<string, Participant> | null }) {
   const [failed, setFailed] = useState(false);
+  const [lastBy, setLastBy] = useState('');
+  const [blocked, setBlocked] = useState(false);
+  const audio = useRef<HTMLAudioElement>(null);
+  const handled = useRef(0);
+  const primed = useRef(false);
+  const { value: requests, loading } = useDbValue<Record<string, { questionId: string; at: number }>>(db, `sessionAudioRequests/${roomId}`);
+
+  useEffect(() => {
+    if (loading) return;
+    let newest: [string, number] | null = null;
+    for (const [uid, r] of Object.entries(requests ?? {})) {
+      if (r.questionId === questionId && r.at > handled.current && (!newest || r.at > newest[1])) newest = [uid, r.at];
+    }
+    // Requests already stored when this screen loaded are history, not a new press.
+    if (!primed.current) {
+      primed.current = true;
+      if (newest) handled.current = newest[1];
+      return;
+    }
+    if (!newest) return;
+    handled.current = newest[1];
+    const el = audio.current;
+    if (!el || !url || failed) return;
+    // While the clip is playing, extra presses don't restart it.
+    if (!el.paused && !el.ended) return;
+    el.currentTime = 0;
+    el.play().then(
+      () => {
+        setBlocked(false);
+        setLastBy(participants?.[newest[0]]?.alias ?? '');
+      },
+      () => setBlocked(true),
+    );
+  }, [requests, loading, questionId, url, failed, participants]);
+
   if (!url) return <p className="media-fallback">🔇 No audio file yet — add audioUrl in the question bank. 尚未加入音檔，可現場示範或播放其他錄音。</p>;
   if (failed) return <p className="media-fallback">⚠️ Audio failed to load. Play from another source and continue. 音檔未能載入。</p>;
-  return <audio className="audio" controls preload="auto" src={url} onError={() => setFailed(true)} />;
+  return (
+    <div>
+      <audio ref={audio} className="audio" controls preload="auto" src={url} onError={() => setFailed(true)} />
+      {blocked && <p className="error">Browser blocked playback — click anywhere on this page once, then ask pupils to press again. 請先點一下此頁面。</p>}
+      {lastBy && <p className="muted">🔊 Played from iPad: {lastBy} 由 iPad 播放</p>}
+    </div>
+  );
 }
 
 function Results({ roomId, bank }: { roomId: string; bank: QuestionBank }) {

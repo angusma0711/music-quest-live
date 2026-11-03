@@ -183,3 +183,13 @@ export async function submitAnswer(db: Database, roomId: string, questionId: str
     return mine?.exists() ? 'duplicate' : 'rejected';
   }
 }
+
+/** Asks the teacher's screen to play the current listening clip. Rules allow one request per pupil every 3 s. */
+export async function requestAudioPlay(db: Database, roomId: string, questionId: string, uid: string): Promise<boolean> {
+  try {
+    await set(ref(db, `sessionAudioRequests/${roomId}/${uid}`), { questionId, at: serverTimestamp() });
+    return true;
+  } catch {
+    return false;
+  }
+}

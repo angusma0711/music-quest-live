@@ -112,7 +112,7 @@ Nothing has been deployed. Everything below is free on the Spark plan.
 
 1. Edit `src/content/demoBank.ts`. Quests and questions are typed, and `kind` is one of `choice | image | listening | rhythm | reflection`. Keep `id`s unique and stable. Set `demo: false` and a new `id`/`title` once the content is confirmed.
 2. Put each answer in `content/answer-keys.<bankId>.json` as `{ "<questionId>": { "correct": <0-based index or null>, "explanation": "…" } }`. **Never** put answers in `src/`.
-3. Images and audio: put licensed files in `public/images/` or `public/audio/` and reference them as `/images/x.jpg`. Audio plays **only on the teacher's screen**. Pupil iPads never autoplay. Missing or broken media shows a fallback and does not block the lesson.
+3. Images and audio: put licensed files in `public/images/` or `public/audio/` and reference them as `/images/x.jpg`. Audio plays **only on the teacher's screen**. Pupils can press a play button on their iPad, which writes a throttled request to `sessionAudioRequests` (rules: participant only, current question, once per 3 s); the teacher screen then plays the clip from the start. iPads never play sound themselves. Missing or broken media shows a fallback and does not block the lesson.
 4. Run `npm test`. It checks that every question has a key, that keys are in range, and that no answers leaked into the public bank. Then re-upload the keys (step 6 above).
 
 ## Privacy

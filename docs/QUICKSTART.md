@@ -4,7 +4,7 @@
 2. **Create room 建立房間**: press **Create new session 建立新房間**.
 3. **Show join code 顯示號碼**: tap the code/QR box at the top-left to show a large QR and the code. Pupils scan it, or open `/join` and type the code and a nickname or class number (e.g. `5B-12`). Watch the **joined / online** counters.
 4. **Launch question 開始**: press **Start adventure 開始冒險**. Every iPad shows question 1 automatically.
-   - **Listening**: press play on the teacher screen. iPads stay silent.
+   - **Listening**: press play on the teacher screen, or let pupils press **🔊 在大螢幕播放聲音** on their iPad. Either way the sound comes out of the teacher computer/projector speakers only; iPads stay silent. Each iPad can press at most once every 3 seconds, and a press while the clip is already playing is ignored. If the browser shows "blocked playback", click anywhere on the teacher page once.
    - **Rhythm**: after the reveal, invite the class to clap.
    - **Reflection 💬**: a discussion prompt with no answers collected.
 5. **Pause 暫停 / Resume 繼續**: stops or resumes submissions. A paused question accepts no answers, even from a reloaded iPad.

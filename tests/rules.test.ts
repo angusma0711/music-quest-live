@@ -250,3 +250,33 @@ describe('reveals', () => {
     await assertFails(get(ref(studentDb(), `sessionResults/${ROOM}`)));
   });
 });
+
+describe('audio play requests (iPad button → teacher screen)', () => {
+  const req = (db: Database, uid = 'stu1', questionId = 'q1') => set(ref(db, `sessionAudioRequests/${ROOM}/${uid}`), { questionId, at: serverTimestamp() });
+  it('participant can request play for the current question; teacher can read it', async () => {
+    await seed('QUESTION_OPEN');
+    await assertSucceeds(req(studentDb()));
+    await assertSucceeds(get(ref(teacherDb(), `sessionAudioRequests/${ROOM}`)));
+    await assertFails(get(ref(studentDb('stu2'), `sessionAudioRequests/${ROOM}`)));
+  });
+  it('is throttled to one press per pupil every 3 seconds', async () => {
+    await seed('QUESTION_OPEN');
+    await assertSucceeds(req(studentDb()));
+    await assertFails(req(studentDb()));
+    await assertSucceeds(req(studentDb('stu2'), 'stu2'));
+  });
+  it('rejects wrong question, outsiders, other uids, and lobby/finished sessions', async () => {
+    await seed('QUESTION_OPEN');
+    await assertFails(req(studentDb(), 'stu1', 'q0'));
+    await assertFails(req(studentDb('outsider'), 'outsider'));
+    await assertFails(req(studentDb('stu1'), 'stu2'));
+    await seed('LOBBY');
+    await assertFails(req(studentDb()));
+    await seed('FINISHED');
+    await assertFails(req(studentDb()));
+  });
+  it('still works after answers close (replay during discussion)', async () => {
+    await seed('ANSWER_REVEALED');
+    await assertSucceeds(req(studentDb()));
+  });
+});
