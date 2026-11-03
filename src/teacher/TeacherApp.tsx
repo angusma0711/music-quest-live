@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getTeacherClient, usingEmulators } from '../services/firebase';
 import { readLocal, useAuthUser, useConnected, useDbValue, writeLocal } from '../services/hooks';
-import { ActionError, createSession, isTeacher, loadAnswerKeys } from '../services/session';
+import { ActionError, createSession, findRoom, isTeacher, loadAnswerKeys } from '../services/session';
 import { demoBank } from '../content/demoBank';
 import type { AnswerKeys, Session } from '../shared/types';
 import { Console } from './Console';
@@ -65,6 +65,7 @@ function TeacherHome({ uid }: { uid: string }) {
   const [roomId, setRoomId] = useState<string | null>(() => readLocal(ROOM_KEY));
   const [keys, setKeys] = useState<AnswerKeys | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const [code, setCode] = useState('');
   const connected = useConnected(db);
   const { value: session, loading } = useDbValue<Session>(db, roomId ? `sessions/${roomId}` : null);
 
@@ -80,6 +81,19 @@ function TeacherHome({ uid }: { uid: string }) {
       setRoomId(id);
     } catch (err) {
       setError(err instanceof ActionError ? err.message : 'Could not create room.');
+    }
+  }
+
+  /** Opens a room this teacher already runs, e.g. on an iPad controller while the projector has it open. */
+  async function openExisting(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    try {
+      const id = await findRoom(db, code);
+      writeLocal(ROOM_KEY, id);
+      setRoomId(id);
+    } catch (err) {
+      setError(err instanceof ActionError ? err.message : 'Could not open room.');
     }
   }
 
@@ -104,6 +118,14 @@ function TeacherHome({ uid }: { uid: string }) {
         <button className="btn btn-primary btn-xl" onClick={newSession} disabled={!connected}>
           Create new session 建立新房間
         </button>
+        <form className="open-existing" onSubmit={openExisting}>
+          <label>
+            Open my existing room (e.g. on an iPad remote) 開啟現有房間
+            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Room code 房間號碼" autoCapitalize="characters" autoComplete="off" maxLength={8} />
+          </label>
+          <button className="btn" disabled={!connected || !code}>Open 開啟</button>
+        </form>
+        {roomId && !loading && (!session || session.owner !== uid) && <p className="error">Can't open that room — it may have ended or belong to another teacher. 未能開啟房間。</p>}
         <button className="btn btn-ghost" onClick={() => signOut(auth)}>Sign out 登出</button>
       </div>
     </main>

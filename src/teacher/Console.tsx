@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { getTeacherClient } from '../services/firebase';
-import { useDbValue } from '../services/hooks';
-import { ActionError, endSession, openQuestion, revealAnswer, setStatus, summarize } from '../services/session';
+import { readLocal, useDbValue, writeLocal } from '../services/hooks';
+import { ActionError, endSession, openQuestion, revealAnswer, sendAudioCommand, setStatus, summarize, type AudioAction } from '../services/session';
 import { CAN_CHANGE_QUESTION_FROM, primaryAction, questStates } from '../shared/stateMachine';
 import { QuestionMedia } from '../shared/QuestionMedia';
 import type { AnswerKeys, Participant, Presence, QuestionBank, QuestionResult, Reveal, Session } from '../shared/types';
@@ -11,6 +11,18 @@ import { WorldMap } from './WorldMap';
 const { db } = getTeacherClient();
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+/**
+ * A teacher can open the console on two devices: the projector computer (plays sound) and an
+ * iPad used as a remote (silent). Remembered per device; touch screens default to remote.
+ */
+export type DeviceRole = 'projector' | 'controller';
+const ROLE_KEY = 'mq.teacher.role';
+function initialRole(): DeviceRole {
+  const saved = readLocal(ROLE_KEY);
+  if (saved === 'projector' || saved === 'controller') return saved;
+  return window.matchMedia?.('(pointer: coarse)').matches ? 'controller' : 'projector';
+}
 
 const STATUS_LABEL: Record<Session['status'], string> = {
   LOBBY: 'Waiting 等候中',
@@ -36,6 +48,7 @@ export function Console({ roomId, session, bank, keys, connected, onLeave }: Pro
   const [error, setError] = useState('');
   const [showDist, setShowDist] = useState(false);
   const [view, setView] = useState<'play' | 'results'>('play');
+  const [role, setRole] = useState<DeviceRole>(initialRole);
   const { value: participants } = useDbValue<Record<string, Participant>>(db, `sessionParticipants/${roomId}`);
   const { value: presence } = useDbValue<Record<string, Presence>>(db, `sessionPresence/${roomId}`);
   const qid = session.questionId || null;
@@ -99,6 +112,17 @@ export function Console({ roomId, session, bank, keys, connected, onLeave }: Pro
           <span className={connected ? 'dot online' : 'dot offline'}>{connected ? 'Connected' : 'Reconnecting… 重新連線中'}</span>
         </div>
         <div className="bar-actions">
+          <button
+            className="btn btn-ghost"
+            title="Projector plays sound; controller (e.g. iPad) is a silent remote"
+            onClick={() => {
+              const next = role === 'projector' ? 'controller' : 'projector';
+              writeLocal(ROLE_KEY, next);
+              setRole(next);
+            }}
+          >
+            {role === 'projector' ? '🖥️ Projector 投影 (plays sound)' : '📱 Controller 遙控 (silent)'}
+          </button>
           <button className="btn btn-ghost" onClick={() => setView(view === 'play' ? 'results' : 'play')}>
             {view === 'play' ? 'Results 結果' : 'Back to map 返回'}
           </button>
@@ -143,7 +167,7 @@ export function Console({ roomId, session, bank, keys, connected, onLeave }: Pro
               <>
                 <h2 className="t-prompt">{question.prompt}</h2>
                 <QuestionMedia question={question} />
-                {question.kind === 'listening' && <AudioPlayer key={question.id} url={question.audioUrl} roomId={roomId} questionId={question.id} participants={participants} />}
+                {question.kind === 'listening' && <AudioPlayer key={question.id} url={question.audioUrl} roomId={roomId} questionId={question.id} role={role} />}
                 {question.kind !== 'reflection' && (
                   <ol className="t-options">
                     {question.options.map((opt, i) => {
@@ -261,53 +285,60 @@ function JoinInfo({ code }: { code: string }) {
 }
 
 /**
- * Classroom listening happens on the projector only; pupils' iPads never autoplay.
- * Pupils can press "play" on their iPad, which plays the clip here from the start.
+ * Classroom listening happens on the projector computer only; pupils' iPads never play sound.
+ * The teacher can start/stop it from a controller device (e.g. an iPad) via `sessionAudio`.
  */
-function AudioPlayer({ url, roomId, questionId, participants }: { url?: string; roomId: string; questionId: string; participants: Record<string, Participant> | null }) {
+function AudioPlayer({ url, roomId, questionId, role }: { url?: string; roomId: string; questionId: string; role: DeviceRole }) {
   const [failed, setFailed] = useState(false);
-  const [lastBy, setLastBy] = useState('');
   const [blocked, setBlocked] = useState(false);
+  const [sent, setSent] = useState('');
   const audio = useRef<HTMLAudioElement>(null);
-  const handled = useRef(0);
-  const primed = useRef(false);
-  const { value: requests, loading } = useDbValue<Record<string, { questionId: string; at: number }>>(db, `sessionAudioRequests/${roomId}`);
+  const lastAt = useRef<number | null>(null);
+  const { value: command, loading } = useDbValue<{ action: AudioAction; questionId: string; at: number }>(db, `sessionAudio/${roomId}`);
 
   useEffect(() => {
-    if (loading) return;
-    let newest: [string, number] | null = null;
-    for (const [uid, r] of Object.entries(requests ?? {})) {
-      if (r.questionId === questionId && r.at > handled.current && (!newest || r.at > newest[1])) newest = [uid, r.at];
-    }
-    // Requests already stored when this screen loaded are history, not a new press.
-    if (!primed.current) {
-      primed.current = true;
-      if (newest) handled.current = newest[1];
+    if (role !== 'projector' || loading) return;
+    // The command stored when this screen loaded is history, not a new press.
+    if (lastAt.current === null) {
+      lastAt.current = command?.at ?? 0;
       return;
     }
-    if (!newest) return;
-    handled.current = newest[1];
+    if (!command || command.at <= lastAt.current || command.questionId !== questionId) return;
+    lastAt.current = command.at;
     const el = audio.current;
-    if (!el || !url || failed) return;
-    // While the clip is playing, extra presses don't restart it.
-    if (!el.paused && !el.ended) return;
+    if (!el) return;
+    if (command.action === 'stop') {
+      el.pause();
+      el.currentTime = 0;
+      return;
+    }
     el.currentTime = 0;
-    el.play().then(
-      () => {
-        setBlocked(false);
-        setLastBy(participants?.[newest[0]]?.alias ?? '');
-      },
-      () => setBlocked(true),
-    );
-  }, [requests, loading, questionId, url, failed, participants]);
+    el.play().then(() => setBlocked(false), () => setBlocked(true));
+  }, [command, loading, role, questionId]);
+
+  async function send(action: AudioAction) {
+    try {
+      await sendAudioCommand(db, roomId, questionId, action);
+      setSent(action === 'play' ? '▶ Sent to projector 已傳送到投影電腦' : '⏹ Stopped 已停止');
+    } catch {
+      setSent('Not sent — check Wi-Fi. 未能傳送。');
+    }
+  }
 
   if (!url) return <p className="media-fallback">🔇 No audio file yet — add audioUrl in the question bank. 尚未加入音檔，可現場示範或播放其他錄音。</p>;
+  if (role === 'controller')
+    return (
+      <div className="remote">
+        <button className="btn btn-primary btn-xl" onClick={() => send('play')}>▶ Play on projector 投影播放</button>
+        <button className="btn btn-xl" onClick={() => send('stop')}>⏹ Stop 停止</button>
+        {sent && <p className="muted" aria-live="polite">{sent}</p>}
+      </div>
+    );
   if (failed) return <p className="media-fallback">⚠️ Audio failed to load. Play from another source and continue. 音檔未能載入。</p>;
   return (
     <div>
       <audio ref={audio} className="audio" controls preload="auto" src={url} onError={() => setFailed(true)} />
-      {blocked && <p className="error">Browser blocked playback — click anywhere on this page once, then ask pupils to press again. 請先點一下此頁面。</p>}
-      {lastBy && <p className="muted">🔊 Played from iPad: {lastBy} 由 iPad 播放</p>}
+      {blocked && <p className="error">Browser blocked playback — click anywhere on this screen once, then press Play again on the controller. 請先點一下此頁面。</p>}
     </div>
   );
 }

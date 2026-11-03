@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { signInAnonymously } from 'firebase/auth';
 import { getStudentClient } from '../services/firebase';
 import { readLocal, useAuthUser, useConnected, useDbValue, writeLocal } from '../services/hooks';
-import { ActionError, findRoom, isParticipant, joinRoom, requestAudioPlay, submitAnswer, trackPresence } from '../services/session';
+import { ActionError, findRoom, isParticipant, joinRoom, submitAnswer, trackPresence } from '../services/session';
 import { demoBank } from '../content/demoBank';
 import { QuestionMedia } from '../shared/QuestionMedia';
 import type { Reveal, Session } from '../shared/types';
@@ -184,7 +184,7 @@ function Play({ roomId, uid, alias, onLeave }: { roomId: string; uid: string; al
         <p className="quest-tag">{quest.icon} {quest.title}</p>
         <h2>{question.prompt}</h2>
         <QuestionMedia question={question} />
-        {question.kind === 'listening' && <PlayOnScreen roomId={roomId} questionId={question.id} uid={uid} />}
+        {question.kind === 'listening' && <p className="hint">🔊 請留心聽老師播放的聲音。</p>}
         {question.kind === 'reflection' ? (
           <p className="stage-msg-inline">💬 請和老師、同學一起討論。</p>
         ) : (
@@ -232,25 +232,4 @@ function StatusLine(p: { status: Session['status']; answered: boolean; confirmed
   if (p.confirmed) return <p className="status good">✅ 已提交！等待老師揭曉答案。</p>;
   if (p.answered) return <p className="status">提交中…</p>;
   return <p className="status">選一個答案。</p>;
-}
-
-/** The sound plays from the classroom screen, never from the iPad, so 30 iPads don't play at once. */
-function PlayOnScreen({ roomId, questionId, uid }: { roomId: string; questionId: string; uid: string }) {
-  const [state, setState] = useState<'idle' | 'sent' | 'wait'>('idle');
-  async function press() {
-    if (state !== 'idle') return;
-    const ok = await requestAudioPlay(db, roomId, questionId, uid);
-    setState(ok ? 'sent' : 'wait');
-    setTimeout(() => setState('idle'), 3000);
-  }
-  return (
-    <div className="play-on-screen">
-      <button className="btn btn-xl" onClick={press} disabled={state !== 'idle'}>
-        🔊 在大螢幕播放聲音
-      </button>
-      <p className="hint" aria-live="polite">
-        {state === 'sent' ? '已請大螢幕播放，請留心聽。' : state === 'wait' ? '請稍等一會再按。' : '聲音會在老師的大螢幕播出。'}
-      </p>
-    </div>
-  );
 }
